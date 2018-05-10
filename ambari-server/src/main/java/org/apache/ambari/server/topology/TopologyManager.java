@@ -304,7 +304,6 @@ public class TopologyManager {
 
     topologyValidatorService.validateTopologyConfiguration(topology);
 
-
     // create resources
     ambariContext.createAmbariResources(topology, clusterName, securityType, repoVersion, repoVersionID);
 

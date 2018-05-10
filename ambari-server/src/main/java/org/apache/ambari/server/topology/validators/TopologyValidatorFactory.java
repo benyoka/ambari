@@ -25,7 +25,7 @@ public class TopologyValidatorFactory {
 
   public TopologyValidatorFactory() {
     validators = ImmutableList.of(new RequiredConfigPropertiesValidator(), new RequiredPasswordValidator(), new HiveServiceValidator(),
-      new StackConfigTypeValidator(), new UnitValidator(UnitValidatedProperty.ALL));
+      new StackConfigTypeValidator(), new UnitValidator(UnitValidatedProperty.ALL), new HdfsValidator());
   }
 
   public TopologyValidator createConfigurationValidatorChain() {

@@ -205,6 +205,7 @@ public class ClusterTopologyImpl implements ClusterTopology {
       && configProperties.get("yarn-site").get("yarn.resourcemanager.ha.enabled").equals("true");
   }
 
+  // TODO: shouldn't this be factored out as a TopologyValidator ?
   private void validateTopology()
       throws InvalidTopologyException {
 

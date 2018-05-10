@@ -199,8 +199,6 @@ public class TopologyManagerTest {
 
   private String predicate = "Hosts/host_name=foo";
 
-  private List<TopologyValidator> topologyValidators = new ArrayList<>();
-
   private Capture<ClusterTopology> clusterTopologyCapture;
   private Capture<Map<String, Object>> configRequestPropertiesCapture;
   private Capture<Map<String, Object>> configRequestPropertiesCapture2;
@@ -383,7 +381,8 @@ public class TopologyManagerTest {
     PowerMock.reset(System.class);
     reset(blueprint, stack, request, group1, group2, ambariContext, logicalRequestFactory,
         logicalRequest, configurationRequest, configurationRequest2, configurationRequest3,
-        requestStatusResponse, executor, persistedState, clusterTopologyMock, mockFuture, settingDAO);
+        requestStatusResponse, executor, persistedState, clusterTopologyMock, mockFuture, settingDAO,
+        topologyValidatorService);
   }
 
   @Test
