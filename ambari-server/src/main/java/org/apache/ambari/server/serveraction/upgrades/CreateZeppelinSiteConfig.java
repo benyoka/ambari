@@ -71,9 +71,9 @@ public class CreateZeppelinSiteConfig extends AbstractServerAction {
       zeppelinSiteConfig.save();
     } else {
       output += String.format("creating new config %s" + System.lineSeparator(), ZEPPELIN_SITE_CONFIG);
-      Config zeppelinSite = configFactory.createNew(cluster.getDesiredStackVersion(), cluster, ZEPPELIN_SITE_CONFIG, VERSION_TAG,
+      // No need to explicitly add to the cluster as ConfigImpl's constructor does it.
+      configFactory.createNew(cluster.getDesiredStackVersion(), cluster, ZEPPELIN_SITE_CONFIG, VERSION_TAG,
               zeppelinConfProperties, zeppelinConfConfig.getPropertiesAttributes(), null);
-      cluster.addConfig(zeppelinSite);
     }
 
     output += String.format("removing %s config" + System.lineSeparator(), ZEPPELIN_CONFIG_CONFIG);

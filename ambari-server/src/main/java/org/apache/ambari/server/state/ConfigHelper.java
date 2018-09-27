@@ -28,6 +28,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -235,10 +236,11 @@ public class ConfigHelper {
     for (Entry<String, DesiredConfig> clusterEntry : clusterDesired.entrySet()) {
       String type = clusterEntry.getKey();
       String tag = clusterEntry.getValue().getTag();
+      Optional<Long> serviceId = clusterEntry.getValue().getServiceIdOption();
 
       // 1) start with cluster config
       if (cluster != null) {
-        Config config = cluster.getConfig(type, tag);
+        Config config = cluster.getConfig(serviceId, type, tag);
         if (null == config) {
           continue;
         }
@@ -936,7 +938,7 @@ public class ConfigHelper {
     for (Map.Entry<String, DesiredConfig> desiredConfigEntry : desiredConfigs.entrySet()) {
       String configType = desiredConfigEntry.getKey();
       DesiredConfig desiredConfig = desiredConfigEntry.getValue();
-      actualConfigs.put(configType, cluster.getConfig(configType, desiredConfig.getTag()));
+      actualConfigs.put(configType, cluster.getConfig(desiredConfig.getServiceIdOption(), configType, desiredConfig.getTag()));
     }
 
     for (String stackConfigType : stackConfigTypes) {
@@ -1026,7 +1028,7 @@ public class ConfigHelper {
     Map<String, DesiredConfig> desiredConfigs = cluster.getDesiredConfigs();
     DesiredConfig desiredConfig = desiredConfigs.get(configType);
     if(desiredConfig != null) {
-      Config config = cluster.getConfig(configType, desiredConfig.getTag());
+      Config config = cluster.getConfig(desiredConfig.getServiceIdOption(), configType, desiredConfig.getTag());
       Map<String, String> configurationProperties = config.getProperties();
       if (null != configurationProperties) {
         String value = configurationProperties.get(propertyName);

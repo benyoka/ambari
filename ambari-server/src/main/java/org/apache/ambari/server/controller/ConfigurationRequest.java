@@ -19,6 +19,9 @@ package org.apache.ambari.server.controller;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
+
+import javax.annotation.Nonnull;
 
 import org.apache.ambari.server.controller.internal.ConfigurationResourceProvider;
 
@@ -70,6 +73,13 @@ public class ConfigurationRequest {
    */
   public Long getServiceId() {
     return serviceId;
+  }
+
+  /**
+   * @return A non-null optional holding the {@link #serviceId} field.
+   */
+  public @Nonnull Optional<Long> getServiceIdOption() {
+    return Optional.ofNullable(serviceId);
   }
 
   /**

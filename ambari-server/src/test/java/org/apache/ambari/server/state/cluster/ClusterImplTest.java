@@ -38,6 +38,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.apache.ambari.server.AmbariException;
 import org.apache.ambari.server.H2DatabaseCleaner;
@@ -365,8 +366,8 @@ public class ClusterImplTest {
     // When
     List<Object> initialVersion = ImmutableList.of(configType, "INITIAL", ImmutableMap.of("prop", "value1"));
     List<Object> topologyResolved = ImmutableList.of(configType, "TOPOLOGY_RESOLVED", ImmutableMap.of("prop", "value2"));
-      cluster.addConfig(createConfig(initialVersion), serviceId);
-    cluster.addConfig(createConfig(topologyResolved), serviceId);
+      cluster.addConfig(createConfig(initialVersion), Optional.of(serviceId));
+    cluster.addConfig(createConfig(topologyResolved), Optional.of(serviceId));
 
     // Then (test that configs are properly saved, one doesn't override the other)
     List<Config> zooCfgVersions = cluster.getConfigsByServiceId(serviceId);

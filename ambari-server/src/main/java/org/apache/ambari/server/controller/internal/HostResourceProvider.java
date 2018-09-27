@@ -916,7 +916,7 @@ public class HostResourceProvider extends AbstractControllerResourceProvider {
               controller.createConfiguration(cr);
             }
 
-            Config baseConfig = cluster.getConfig(cr.getType(), cr.getVersionTag());
+            Config baseConfig = cluster.getConfig(cr.getServiceIdOption(), cr.getType(), cr.getVersionTag());
             if (null != baseConfig) {
               String authName = controller.getAuthName();
               DesiredConfig oldConfig = host.getDesiredConfigs(clusterId).get(cr.getType());

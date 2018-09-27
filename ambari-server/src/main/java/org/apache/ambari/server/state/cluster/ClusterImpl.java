@@ -170,6 +170,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Maps;
@@ -188,6 +189,8 @@ public class ClusterImpl implements Cluster {
    * Prefix for cluster session attributes name.
    */
   private static final String CLUSTER_SESSION_ATTRIBUTES_PREFIX = "cluster_session_attributes:";
+
+  private static final Set<String> GLOBAL_CONFIG_TYPES = ImmutableSet.of("global", ConfigHelper.CLUSTER_ENV);
 
   @Inject
   private Clusters clusters;
@@ -1502,12 +1505,14 @@ public class ClusterImpl implements Cluster {
   }
 
   @Override
-  public Config getConfig(String configType, @Nonnull String versionTag) {
-    return getConfig(configType, versionTag, Optional.empty());
+  public Config getConfig(@Nonnull String configType, @Nonnull String versionTag) {
+    return getConfig(Optional.empty(), configType, versionTag);
   }
 
+
   @Override
-  public Config getConfig(@Nonnull String configType, @Nonnull String versionTag, @Nonnull Optional<Long> serviceId) {
+  public Config getConfig(@Nonnull Optional<Long> serviceId, @Nonnull String configType, @Nonnull String versionTag) {
+    checkServiceId("getConfig", serviceId, configType);
     clusterGlobalLock.readLock().lock();
     try {
       ConcurrentMap<String, ConcurrentMap<String, Config>> configs =
@@ -1610,16 +1615,24 @@ public class ClusterImpl implements Cluster {
   }
 
   @Override
-  public void addConfig(Config config, Long serviceId) {
-    if (config.getType() == null || config.getType().isEmpty()) {
-      throw new IllegalArgumentException("Config type cannot be empty");
-    }
+  public void addConfig(Config config, Optional<Long> serviceId) {
+    Preconditions.checkArgument(config.getType() != null && !config.getType().isEmpty(), "Config type cannot be empty");
+    checkServiceId("addConfig", Optional.empty(), config.getType());
     clusterGlobalLock.writeLock().lock();
     try {
-      serviceConfigs
-        .computeIfAbsent(serviceId, __ -> new ConcurrentHashMap<>())
-        .computeIfAbsent(config.getType(), __ -> new ConcurrentHashMap<>())
-        .put(config.getTag(), config);
+      if (serviceId.isPresent()) {
+        serviceConfigs
+          .computeIfAbsent(serviceId.get(), __ -> new ConcurrentHashMap<>())
+          .computeIfAbsent(config.getType(), __ -> new ConcurrentHashMap<>())
+          .put(config.getTag(), config);
+      }
+      // TODO: enable 'else' guard. Disabled only for legacy behavior
+//      else {
+        allConfigs
+          .computeIfAbsent(config.getType(), __ -> new ConcurrentHashMap<>())
+          .put(config.getTag(), config);
+
+//      }
     } finally {
         clusterGlobalLock.writeLock().unlock();
     }
@@ -2568,18 +2581,30 @@ public class ClusterImpl implements Cluster {
   //TODO this needs to be reworked to support multiple instance of same service
   @Override
   public Config getDesiredConfigByType(String configType) {
+    return getDesiredConfigByType(Optional.empty(), configType);
+  }
+
+
+  @Override
+  public Config getDesiredConfigByType(Optional<Long> serviceId, String configType) {
     ClusterConfigEntity config = clusterDAO.findEnabledConfigByType(getClusterId(), configType);
     if (null == config) {
       return null;
     }
-
-    return getConfig(configType, config.getTag());
+    return getConfig(serviceId, configType, config.getTag());
   }
 
   @Override
   public boolean isConfigTypeExists(String configType) {
     ClusterConfigEntity config = clusterDAO.findEnabledConfigByType(getClusterId(), configType);
     return null != config;
+  }
+
+  private void checkServiceId(String operation, Optional<Long> serviceId, String configType) {
+    if ( !(serviceId.isPresent() || GLOBAL_CONFIG_TYPES.contains(configType)) ) {
+      LOG.warn("{}: config type [{}] should be service instance level, but no serviceId is present.",
+        operation, configType);
+    }
   }
 
   //TODO this needs to be reworked to support multiple instance of same service

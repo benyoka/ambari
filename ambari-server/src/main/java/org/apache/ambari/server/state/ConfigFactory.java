@@ -40,7 +40,7 @@ public interface ConfigFactory {
 
 
   /**
-   * Creates a new {@link Config} object using provided values.
+   * Creates (and persists and caches in {@link Cluster}!) a new {@link Config} object using provided values.
    *
    * @param cluster
    * @param type

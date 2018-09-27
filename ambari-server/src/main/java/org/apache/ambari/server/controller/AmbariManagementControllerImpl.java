@@ -1158,14 +1158,9 @@ public class AmbariManagementControllerImpl implements AmbariManagementControlle
   @Override
   public Config createConfig(Cluster cluster, StackId stackId, String type, Map<String, String> properties,
                              String versionTag, Map<String, Map<String, String>> propertiesAttributes, Long serviceId) {
-
+    // No need to explicitly add to the cluster as ConfigImpl's constructor does it.
     Config config = configFactory.createNew(stackId, cluster, type, versionTag, properties,
         propertiesAttributes, serviceId);
-    // TODO: the constructor of ConfigImpl adds itself to the cluster so calling this method
-    // should not be necessary. It causes some confusion with service instance level configs
-    // (where a serviceId is present). The result of the extra addConfig() call adds these configs
-    // to the cluster level configs too adding confusion.
-    cluster.addConfig(config);
     return config;
   }
 
@@ -1630,15 +1625,15 @@ public class AmbariManagementControllerImpl implements AmbariManagementControlle
       Config config = null;
       //TODO : Remove after getting rid of cluster configurations
       if (request.getServiceId() != null) {
-        config = cluster.getConfig(request.getType(), request.getVersionTag(), Optional.of(request.getServiceId()));
+        config = cluster.getConfig(Optional.of(request.getServiceId()), request.getType(), request.getVersionTag());
         if (null != config) {
           response = new ConfigurationResponse(
                   cluster.getClusterName(), config, request.getServiceId(), request.getServiceGroupId());
         }
       }
       if (response == null) {
-        config = cluster.getConfig(request.getType(),
-                request.getVersionTag());
+        config = cluster.getConfig(Optional.ofNullable(request.getServiceId()),
+            request.getType(), request.getVersionTag());
         if (null != config) {
           response = new ConfigurationResponse(
                   cluster.getClusterName(), config);
@@ -1915,7 +1910,7 @@ public class AmbariManagementControllerImpl implements AmbariManagementControlle
             }
           }
           note = cr.getServiceConfigVersionNote();
-          Config config = cluster.getConfig(configType, cr.getVersionTag(), Optional.ofNullable(cr.getServiceId()));
+          Config config = cluster.getConfig(Optional.ofNullable(cr.getServiceId()), configType, cr.getVersionTag());
           if (null != config) {
             configs.add(config);
           }
@@ -2143,7 +2138,9 @@ public class AmbariManagementControllerImpl implements AmbariManagementControlle
           }
         }
 
-        Config clusterConfig = cluster.getDesiredConfigByType(configurationRequest.getType());
+        Config clusterConfig = cluster.getDesiredConfigByType(
+          configurationRequest.getServiceIdOption(),
+          configurationRequest.getType());
         Map<String, String> clusterConfigProperties = null;
         Map<String,Map<String,String>> clusterConfigAttributes = null;
         if (clusterConfig != null) {
@@ -2159,7 +2156,8 @@ public class AmbariManagementControllerImpl implements AmbariManagementControlle
         }
 
         if (requestConfigProperties == null || requestConfigProperties.isEmpty()) {
-          Config existingConfig = cluster.getConfig(configurationRequest.getType(), configurationRequest.getVersionTag());
+          Config existingConfig = cluster.getConfig(
+            configurationRequest.getServiceIdOption(), configurationRequest.getType(), configurationRequest.getVersionTag());
           if (existingConfig != null) {
             if (!StringUtils.equals(existingConfig.getTag(), clusterConfig.getTag())) {
               isConfigurationCreationNeeded = true;
@@ -2230,7 +2228,7 @@ public class AmbariManagementControllerImpl implements AmbariManagementControlle
 
     // Get the current/desired properties for the relevant configuration type and ensure that the
     // property map is not null.
-    Config existingConfig = cluster.getDesiredConfigByType(request.getType());
+    Config existingConfig = cluster.getDesiredConfigByType(request.getServiceIdOption(), request.getType());
     Map<String, String> existingProperties = (existingConfig == null) ? null : existingConfig.getProperties();
     if (existingProperties == null) {
       existingProperties = Collections.emptyMap();
@@ -5611,7 +5609,7 @@ public class AmbariManagementControllerImpl implements AmbariManagementControlle
               }
             }
             note = request.getNote();
-            Config config = cluster.getConfig(configType, cr.getVersionTag());
+            Config config = cluster.getConfig(cr.getServiceIdOption(), configType, cr.getVersionTag());
             if (null != config) {
               configs.add(config);
             }

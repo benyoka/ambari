@@ -438,13 +438,13 @@ public interface Cluster {
    * If {@code serviceId} is present, the config will be first looked up in service instance level configs, when absent,
    * cluster level configs will be searched.
    *
+   * @param serviceId The optional serviceid. When present, the config will be looked up from service leve configs
    * @param configType the config type to find
    * @param versionTag the config version tag to find
-   * @param serviceId The optional serviceid. When present, the config will be looked up from service leve configs
    * @return a {@link Config} object, or <code>null</code> if the specific type
    * and version have not been set.
    */
-  Config getConfig(@Nonnull String configType, @Nonnull String versionTag, @Nonnull Optional<Long> serviceId);
+  Config getConfig(@Nonnull Optional<Long> serviceId, @Nonnull String configType, @Nonnull String versionTag);
 
   /**
    * Get latest (including inactive ones) configurations with any of the given types.
@@ -466,11 +466,13 @@ public interface Cluster {
   Config getConfigByVersion(String configType, Long configVersion);
 
   /**
+   * @deprecated use {@link #addConfig(Config, Optional)} instead
    * Sets a specific config.  NOTE:  This is not a DESIRED configuration that
    * applies to a cluster.
    *
    * @param config the config instance to add
    */
+  @Deprecated
   void addConfig(Config config);
 
   /**
@@ -480,7 +482,7 @@ public interface Cluster {
    * @param config the config instance to add
    *        serviceId service id for the config
    */
-  void addConfig(Config config, Long serviceId);
+  void addConfig(Config config, Optional<Long> serviceId);
 
   /**
    * Gets all configurations defined for a cluster.
@@ -559,13 +561,24 @@ public interface Cluster {
   List<ServiceConfigVersionResponse> getServiceConfigVersions();
 
   /**
+   * @deprecated please use {@link #getDesiredConfigByType(Optional, String)} instead
    * Gets the desired (and selected) config by type.
    *
    * @param configType the type of configuration
    * @return the {@link Config} instance, or <code>null</code> if the type has
    * not been set.
    */
+  @Deprecated
   Config getDesiredConfigByType(String configType);
+
+  /**
+   * Gets the desired (and selected) config by type.
+   *
+   * @param configType the type of configuration
+   * @return the {@link Config} instance, or <code>null</code> if the type has
+   * not been set.
+   */
+  Config getDesiredConfigByType(Optional<Long> serviceId, String configType);
 
   /**
    * Check if config type exists in cluster.

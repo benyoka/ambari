@@ -67,7 +67,7 @@ public class HardcodedStackVersionPropertiesCheck extends ClusterCheck {
     for (Entry<String, DesiredConfig> configEntry : desiredConfigs.entrySet()) {
       String configType = configEntry.getKey();
       DesiredConfig desiredConfig = configEntry.getValue();
-      final Config config = cluster.getConfig(configType, desiredConfig.getTag());
+      final Config config = cluster.getConfig(desiredConfig.getServiceIdOption(), configType,  desiredConfig.getTag());
 
       Map<String, String> properties = config.getProperties();
       for (Entry<String, String> property : properties.entrySet()) {

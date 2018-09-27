@@ -19,9 +19,13 @@ package org.apache.ambari.server.state;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+
+import javax.annotation.Nonnull;
 
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
+import org.codehaus.jackson.annotate.JsonIgnore;
 import org.codehaus.jackson.annotate.JsonProperty;
 import org.codehaus.jackson.map.annotate.JsonSerialize;
 import org.codehaus.jackson.map.annotate.JsonSerialize.Inclusion;
@@ -63,6 +67,14 @@ public class DesiredConfig {
   @JsonProperty("service_id")
   public Long getServiceId() {
     return serviceId;
+  }
+
+  /**
+   * @return An optional holding the value of the nullable {@link #serviceId} field.
+   */
+  @JsonIgnore
+  public @Nonnull Optional<Long> getServiceIdOption() {
+    return Optional.ofNullable(serviceId);
   }
 
   /**

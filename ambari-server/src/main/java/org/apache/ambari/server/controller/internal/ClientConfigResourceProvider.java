@@ -295,7 +295,7 @@ public class ClientConfigResourceProvider extends AbstractControllerResourceProv
 
           String configType = desiredConfigEntry.getKey();
           DesiredConfig desiredConfig = desiredConfigEntry.getValue();
-          Config clusterConfig = cluster.getConfig(configType, desiredConfig.getTag());
+          Config clusterConfig = cluster.getConfig(desiredConfig.getServiceIdOption(), configType, desiredConfig.getTag());
 
           if (clusterConfig != null) {
             Map<String, String> props = new HashMap<>(clusterConfig.getProperties());

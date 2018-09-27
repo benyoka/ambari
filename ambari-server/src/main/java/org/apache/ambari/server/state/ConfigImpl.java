@@ -21,6 +21,7 @@ package org.apache.ambari.server.state;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentMap;
@@ -109,6 +110,9 @@ public class ConfigImpl implements Config {
         clusterDAO, stackDAO, gson, eventPublisher, lockFactory);
   }
 
+  /**
+   * This constructor adds the config to the cluster
+   */
   @AssistedInject
   ConfigImpl(@Assisted @Nullable StackId stackId, @Assisted Cluster cluster, @Assisted("type") String type,
       @Assisted("tag") @Nullable String tag,
@@ -350,11 +354,7 @@ public class ConfigImpl implements Config {
     persistEntitiesInTransaction(entity);
 
     // ensure that the in-memory state of the cluster is kept consistent
-    if(entity.getServiceId() == null) {
-      cluster.addConfig(this);
-    }else{
-      cluster.addConfig(this,entity.getServiceId());
-    }
+    cluster.addConfig(this, Optional.ofNullable(entity.getServiceId()));
 
     // re-load the entity associations for the cluster
     cluster.refresh();

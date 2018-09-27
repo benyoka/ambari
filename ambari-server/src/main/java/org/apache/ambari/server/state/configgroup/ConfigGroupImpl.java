@@ -177,9 +177,9 @@ public class ConfigGroupImpl implements ConfigGroup {
     // Populate configs
     for (ConfigGroupConfigMappingEntity configMappingEntity : configGroupEntity.getConfigGroupConfigMappingEntities()) {
       Config config = cluster.getConfig(
-        configMappingEntity.getConfigType(),
-        configMappingEntity.getVersionTag(),
-        Optional.ofNullable(serviceId));
+        Optional.ofNullable(serviceId), configMappingEntity.getConfigType(),
+        configMappingEntity.getVersionTag()
+      );
 
       if (config != null) {
         m_configurations.put(config.getType(), config);
@@ -441,13 +441,7 @@ public class ConfigGroupImpl implements ConfigGroup {
 
           config = configFactory.createNew(service.getStackId(), cluster, config.getType(),
               config.getTag(), config.getProperties(), config.getPropertiesAttributes(), serviceId);
-          // TODO: the following line should not be here, adding only temporarily for compatibility
-          // ClusterImpl keeps cluster level configs and service instance level configs (those associated with
-          // a serviceId) separately. Most of current Ambari code only uses cluster level configs. (TODO: fix it!)
-          // When a service instance level config is created using AmbariManagementController.createConfig() it will
-          // be added to the cluster both as service level and cluster level configs. To keep consistency with
-          // this behavior service level configs created here will too be added as cluster level configs until
-          // this thing gets fixed.
+          // No need to explicitly add to the cluster as ConfigImpl's constructor does it.
           cluster.addConfig(config);
 
           entry.setValue(config);
