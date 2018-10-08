@@ -18,12 +18,14 @@
 
 package org.apache.ambari.server.topology;
 
+import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.mapping;
+import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -535,11 +537,22 @@ public class AmbariContext {
       // for all config types specified
       for (String actualConfigType : updatedConfigTypes) {
         // get the actual cluster config for comparison
-        DesiredConfig actualConfig = cluster.getDesiredConfigs().get(actualConfigType);
-        if (actualConfig == null && actualConfigType.equals("core-site")) {
+        // TODO: must rewrite for multi-service - if there are multiple configs with the same type (multi-service) the
+        // current implementation will wait only until one of the configs (e.g. one hdfs-site) becomes TOPOLOGY_RESOLVED
+        Map<String, List<DesiredConfig>> desiredConfigs = cluster.getDesiredConfigsNew().entrySet().stream()
+          .map(e -> Pair.of(e.getKey().getRight(), e.getValue()))
+          .collect(groupingBy(Map.Entry::getKey, mapping(e -> e.getValue(), toList())));
+
+        List<DesiredConfig> actualConfigs = desiredConfigs.get(actualConfigType);
+
+        if (actualConfigs == null && actualConfigType.equals("core-site")) {
           continue;
         }
-        if (!actualConfig.getTag().equals(TopologyManager.TOPOLOGY_RESOLVED_TAG)) {
+        boolean isTopologyResolved = actualConfigs.stream()
+          .filter(conf -> conf.getTag().equals(TopologyManager.TOPOLOGY_RESOLVED_TAG))
+          .findFirst().isPresent(); // TODO: rewrite this logic when BlueprinConfigurationProcessor will support multi-service
+
+        if (isTopologyResolved) {
           // if any expected config is not resolved, deployment must wait
           LOG.info("Config type " + actualConfigType + " not resolved yet, Blueprint deployment will wait until configuration update is completed");
           numOfRequestsStillRequiringResolution++;
@@ -577,26 +590,12 @@ public class AmbariContext {
       Cluster cluster = getController().getClusters().getClusterById(clusterId);
 
       // Check through the various cluster config versions that these transitioned through TopologyManager.INITIAL -> .... -> TopologyManager.TOPOLOGY_RESOLVED -> ....
-      Map<String, Set<DesiredConfig>> allDesiredConfigsByType = cluster.getAllDesiredConfigVersions();
+      Map<Pair<Long, String>, Set<DesiredConfig>> allDesiredConfigsByType = cluster.getAllDesiredConfigVersions();
 
-      for (String configType: allDesiredConfigsByType.keySet()) {
-        Set<DesiredConfig> desiredConfigVersions = allDesiredConfigsByType.get(configType);
+      for (Set<DesiredConfig> desiredConfigVersions: allDesiredConfigsByType.values()) {
 
-        SortedSet<DesiredConfig> desiredConfigsOrderedByVersion = new TreeSet<>(new Comparator<DesiredConfig>() {
-          @Override
-          public int compare(DesiredConfig o1, DesiredConfig o2) {
-            if (o1.getVersion() < o2.getVersion()) {
-              return -1;
-            }
-
-            if (o1.getVersion() > o2.getVersion()) {
-              return 1;
-            }
-
-            return 0;
-          }
-        });
-
+        SortedSet<DesiredConfig> desiredConfigsOrderedByVersion = new TreeSet<>(
+          (c1, c2) -> c1.getVersion() < c2.getVersion() ? -1 : c1.getVersion() > c2.getVersion() ? 1 : 0);
         desiredConfigsOrderedByVersion.addAll(desiredConfigVersions);
 
         int tagMatchState = 0; // 0 -> INITIAL -> tagMatchState = 1 -> TOPLOGY_RESOLVED -> tagMatchState = 2

@@ -637,10 +637,9 @@ public class AmbariContextTest {
     testCoreSiteDesiredConfig.setVersion(1L);
 
 
-    Map<String, Set<DesiredConfig>> testDesiredConfigs = ImmutableMap.<String, Set<DesiredConfig>>builder()
-      .put("hdfs-site", ImmutableSet.of(testHdfsDesiredConfig2, testHdfsDesiredConfig3, testHdfsDesiredConfig1))
-      .put("core-site", ImmutableSet.of(testCoreSiteDesiredConfig))
-      .build();
+    Map<Pair<Long, String>, Set<DesiredConfig>> testDesiredConfigs = ImmutableMap.of(
+      Pair.of(null, "hdfs-site"), ImmutableSet.of(testHdfsDesiredConfig2, testHdfsDesiredConfig3, testHdfsDesiredConfig1),
+      Pair.of(null, "core-site"), ImmutableSet.of(testCoreSiteDesiredConfig));
 
     expect(cluster.getAllDesiredConfigVersions()).andReturn(testDesiredConfigs).atLeastOnce();
 
@@ -673,11 +672,9 @@ public class AmbariContextTest {
     testCoreSiteDesiredConfig.setTag("ver123");
     testCoreSiteDesiredConfig.setVersion(1L);
 
-
-    Map<String, Set<DesiredConfig>> testDesiredConfigs = ImmutableMap.<String, Set<DesiredConfig>>builder()
-      .put("hdfs-site", ImmutableSet.of(testHdfsDesiredConfig2, testHdfsDesiredConfig3, testHdfsDesiredConfig1))
-      .put("core-site", ImmutableSet.of(testCoreSiteDesiredConfig))
-      .build();
+    Map<Pair<Long, String>, Set<DesiredConfig>> testDesiredConfigs = ImmutableMap.of(
+      Pair.of(null, "hdfs-site"), ImmutableSet.of(testHdfsDesiredConfig2, testHdfsDesiredConfig3, testHdfsDesiredConfig1),
+      Pair.of(null, "core-site"), ImmutableSet.of(testCoreSiteDesiredConfig));
 
     expect(cluster.getAllDesiredConfigVersions()).andReturn(testDesiredConfigs).atLeastOnce();
 
@@ -703,11 +700,9 @@ public class AmbariContextTest {
     testCoreSiteDesiredConfig.setTag("ver123");
     testCoreSiteDesiredConfig.setVersion(1L);
 
-
-    Map<String, Set<DesiredConfig>> testDesiredConfigs = ImmutableMap.<String, Set<DesiredConfig>>builder()
-      .put("hdfs-site", ImmutableSet.of(testHdfsDesiredConfig1))
-      .put("core-site", ImmutableSet.of(testCoreSiteDesiredConfig))
-      .build();
+    Map<Pair<Long, String>, Set<DesiredConfig>> testDesiredConfigs = ImmutableMap.of(
+      Pair.of(null, "hdfs-site"), ImmutableSet.of(testHdfsDesiredConfig1),
+      Pair.of(null, "core-site"), ImmutableSet.of(testCoreSiteDesiredConfig));
 
     expect(cluster.getAllDesiredConfigVersions()).andReturn(testDesiredConfigs).atLeastOnce();
 

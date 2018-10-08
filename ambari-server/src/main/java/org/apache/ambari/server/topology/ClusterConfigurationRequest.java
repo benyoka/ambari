@@ -142,6 +142,8 @@ public class ClusterConfigurationRequest {
 
   public void process() throws AmbariException, ConfigurationTopologyException {
     // this will update the topo cluster config and all host group configs in the cluster topology
+    // TODO: Updated config types should also contain the serviceId once BlueprintConfigurationProcessor will be multi-service
+    // aware
     Set<String> updatedConfigTypes = new HashSet<>();
 
     Map<String, Map<String, String>> userProvidedConfigurations = clusterTopology.getConfiguration().getFullProperties(1);

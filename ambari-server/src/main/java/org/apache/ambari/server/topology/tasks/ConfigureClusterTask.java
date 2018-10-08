@@ -83,7 +83,6 @@ public class ConfigureClusterTask implements Callable<Boolean> {
       throw new AsyncCallableService.RetryTaskSilently(msg);
     }
 
-
     LOG.info("All required host groups are complete, cluster configuration can now begin");
     configRequest.process();
     LOG.info("Cluster configuration finished successfully");

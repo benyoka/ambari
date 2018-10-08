@@ -41,6 +41,7 @@ import javax.persistence.TableGenerator;
 import javax.persistence.UniqueConstraint;
 
 import org.apache.commons.lang.builder.EqualsBuilder;
+import org.apache.commons.lang3.tuple.Pair;
 
 @Entity
 @Table(name = "clusterconfig",
@@ -232,6 +233,10 @@ public class ClusterConfigEntity {
 
   public void setAttributes(String attributes) {
     configAttributesJson = attributes;
+  }
+
+  public Pair<Long, String> getServiceIdAndType() {
+    return Pair.of(serviceId, type);
   }
 
   /**

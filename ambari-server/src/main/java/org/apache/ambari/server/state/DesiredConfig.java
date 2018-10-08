@@ -19,16 +19,20 @@ package org.apache.ambari.server.state;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 import javax.annotation.Nonnull;
 
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
+import org.apache.commons.lang3.tuple.Pair;
 import org.codehaus.jackson.annotate.JsonIgnore;
 import org.codehaus.jackson.annotate.JsonProperty;
 import org.codehaus.jackson.map.annotate.JsonSerialize;
 import org.codehaus.jackson.map.annotate.JsonSerialize.Inclusion;
+
+import com.google.common.base.MoreObjects;
 
 /**
  * Class that holds information about a desired config and is suitable for output
@@ -36,11 +40,31 @@ import org.codehaus.jackson.map.annotate.JsonSerialize.Inclusion;
  */
 public class DesiredConfig {
 
+  private String configType;
   private String tag;
   private Long serviceId;
   private Long serviceGroupId;
   private Long version;
   private List<HostOverride> hostOverrides = new ArrayList<>();
+
+  public Pair<Long, String> getServiceIdAndType() {
+    return Pair.of(serviceId, configType);
+  }
+
+  /**
+   * @return the config type
+   */
+  @JsonProperty("config_type")
+  public String getConfigType() {
+    return configType;
+  }
+
+  /**
+   * @param configType the config type
+   */
+  public void setConfigType(String configType) {
+    this.configType = configType;
+  }
 
   /**
    * Sets the tag
@@ -187,56 +211,32 @@ public class DesiredConfig {
   }
 
   @Override
-  public String toString() {
-    StringBuilder sb = new StringBuilder();
-    sb.append("{");
-    sb.append("tag=").append(tag);
-    if (null != serviceGroupId)
-      sb.append(", serviceGroupId=").append(serviceGroupId);
-    if (null != serviceId)
-      sb.append(", serviceId=").append(serviceId);
-    if (null != hostOverrides && hostOverrides.size() > 0) {
-      sb.append(", hosts=[");
-      int i = 0;
-      for (DesiredConfig.HostOverride h : hostOverrides)
-      {
-        if (i++ != 0)
-          sb.append(",");
-        sb.append(h.getName()).append(':').append(h.getVersionTag());
-      }
-
-      sb.append(']');
-    }
-    sb.append("}");
-
-    return sb.toString();
-  }
-
-  @Override
   public boolean equals(Object o) {
     if (this == o) return true;
-
     if (o == null || getClass() != o.getClass()) return false;
-
     DesiredConfig that = (DesiredConfig) o;
-
-    return new EqualsBuilder()
-      .append(tag, that.tag)
-      .append(serviceGroupId, that.serviceGroupId)
-      .append(serviceId, that.serviceId)
-      .append(version, that.version)
-      .append(hostOverrides, that.hostOverrides)
-      .isEquals();
+    return Objects.equals(configType, that.configType) &&
+      Objects.equals(tag, that.tag) &&
+      Objects.equals(serviceId, that.serviceId) &&
+      Objects.equals(serviceGroupId, that.serviceGroupId) &&
+      Objects.equals(version, that.version) &&
+      Objects.equals(hostOverrides, that.hostOverrides);
   }
 
   @Override
   public int hashCode() {
-    return new HashCodeBuilder(17, 37)
-      .append(tag)
-      .append(serviceGroupId)
-      .append(serviceId)
-      .append(version)
-      .append(hostOverrides)
-      .toHashCode();
+    return Objects.hash(configType, tag, serviceId, serviceGroupId, version, hostOverrides);
+  }
+
+  @Override
+  public String toString() {
+    return MoreObjects.toStringHelper(this)
+      .add("configType", configType)
+      .add("tag", tag)
+      .add("serviceId", serviceId)
+      .add("serviceGroupId", serviceGroupId)
+      .add("version", version)
+      .add("hostOverrides", hostOverrides)
+      .toString();
   }
 }

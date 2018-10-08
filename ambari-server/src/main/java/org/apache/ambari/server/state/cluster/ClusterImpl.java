@@ -18,10 +18,14 @@
 
 package org.apache.ambari.server.state.cluster;
 
+import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.toList;
+import static java.util.stream.Collectors.toMap;
+import static java.util.stream.Collectors.toSet;
 import static org.apache.ambari.server.utils.CollectionUtils.emptyConcurrentMap;
 
 import java.text.MessageFormat;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -45,7 +49,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import javax.persistence.EntityManager;
 import javax.persistence.RollbackException;
 
@@ -112,7 +115,6 @@ import org.apache.ambari.server.orm.entities.ClusterSettingEntity;
 import org.apache.ambari.server.orm.entities.ClusterStateEntity;
 import org.apache.ambari.server.orm.entities.ConfigGroupEntity;
 import org.apache.ambari.server.orm.entities.HostComponentDesiredStateEntity;
-import org.apache.ambari.server.orm.entities.HostEntity;
 import org.apache.ambari.server.orm.entities.PermissionEntity;
 import org.apache.ambari.server.orm.entities.PrivilegeEntity;
 import org.apache.ambari.server.orm.entities.RequestScheduleEntity;
@@ -162,6 +164,7 @@ import org.apache.ambari.server.topology.TopologyRequest;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1601,23 +1604,13 @@ public class ClusterImpl implements Cluster {
 
   @Override
   public void addConfig(Config config) {
-    Preconditions.checkArgument(config.getType() != null && !config.getType().isEmpty(), "Config type cannot be empty");
-    clusterGlobalLock.writeLock().lock();
-    try {
-      if (!allConfigs.containsKey(config.getType())) {
-        allConfigs.put(config.getType(), new ConcurrentHashMap<>());
-      }
-
-      allConfigs.get(config.getType()).put(config.getTag(), config);
-    } finally {
-      clusterGlobalLock.writeLock().unlock();
-    }
+    addConfig(config, Optional.empty());
   }
 
   @Override
   public void addConfig(Config config, Optional<Long> serviceId) {
     Preconditions.checkArgument(config.getType() != null && !config.getType().isEmpty(), "Config type cannot be empty");
-    checkServiceId("addConfig", Optional.empty(), config.getType());
+    checkServiceId("addConfig", serviceId, config.getType());
     clusterGlobalLock.writeLock().lock();
     try {
       if (serviceId.isPresent()) {
@@ -1631,7 +1624,6 @@ public class ClusterImpl implements Cluster {
         allConfigs
           .computeIfAbsent(config.getType(), __ -> new ConcurrentHashMap<>())
           .put(config.getTag(), config);
-
 //      }
     } finally {
         clusterGlobalLock.writeLock().unlock();
@@ -1953,37 +1945,35 @@ public class ClusterImpl implements Cluster {
   //TODO this needs to be reworked to support multiple instance of same service
   @Override
   public ServiceConfigVersionResponse addDesiredConfig(String user, Set<Config> configs, String serviceConfigVersionNote) throws AmbariException {
+    return addDesiredConfig(user, Optional.empty(), configs, serviceConfigVersionNote);
+  }
+
+  @Override
+  public ServiceConfigVersionResponse addDesiredConfig(String user, Optional<Long> serviceId, Set<Config> configs) throws AmbariException {
+    return addDesiredConfig(user, configs, null);
+  }
+
+  @Override
+  public ServiceConfigVersionResponse addDesiredConfig(String user, Optional<Long> serviceId, Set<Config> configs, String serviceConfigVersionNote) throws AmbariException {
     if (null == user) {
       throw new NullPointerException("User must be specified.");
     }
 
+    if (configs == null) {
+      return null;
+    }
+
     clusterGlobalLock.writeLock().lock();
     try {
-      if (configs == null) {
-        return null;
-      }
+      Set<Config> changedConfigs = configs.stream()
+        .filter(Objects::nonNull)
+        .filter(config -> {
+          Config currentDesired = getDesiredConfigByType(serviceId, config.getType());
+          return null == currentDesired || !currentDesired.getTag().equals(config.getTag());
+        })
+        .collect(toSet());
 
-      Iterator<Config> configIterator = configs.iterator();
-
-      while (configIterator.hasNext()) {
-        Config config = configIterator.next();
-        if (config == null) {
-          configIterator.remove();
-          continue;
-        }
-        Config currentDesired = getDesiredConfigByType(config.getType());
-
-        // do not set if it is already the current
-        if (null != currentDesired
-          && currentDesired.getTag().equals(config.getTag())) {
-          configIterator.remove();
-        }
-      }
-
-      ServiceConfigVersionResponse serviceConfigVersionResponse = applyConfigs(
-        configs, user, serviceConfigVersionNote);
-
-      return serviceConfigVersionResponse;
+      return applyConfigs(serviceId, changedConfigs, user, serviceConfigVersionNote);
     } finally {
       clusterGlobalLock.writeLock().unlock();
     }
@@ -1993,30 +1983,57 @@ public class ClusterImpl implements Cluster {
    * Gets all versions of the desired configurations for the cluster.
    * @return a map of type-to-configuration information.
    */
-  //TODO this needs to be reworked to support multiple instance of same service
   @Override
-  public Map<String, Set<DesiredConfig>> getAllDesiredConfigVersions() {
+  public Map<Pair<Long, String>, Set<DesiredConfig>> getAllDesiredConfigVersions() {
     return getDesiredConfigs(true, true);
   }
 
 
-  //TODO this needs to be reworked to support multiple instance of same service
   @Override
   public Map<String, DesiredConfig> getDesiredConfigs() {
-    return getDesiredConfigs(true);
+    return groupByConfigTypeOnly(getDesiredConfigsNew());
   }
 
   @Override
   public Map<String, DesiredConfig> getDesiredConfigs(boolean cachedConfigEntities) {
-    Map<String, Set<DesiredConfig>> activeConfigsByType = getDesiredConfigs(false, cachedConfigEntities);
+      return groupByConfigTypeOnly(getDesiredConfigsNew(cachedConfigEntities));
+  }
+
+  /**
+   * TODO: remove once multi-service-instance feature is completed
+   * This is a temporary method that needs to be eliminated once all Ambari code will become multi-service aware.
+   * The multi-service aware versions of {@link Cluster#getDesiredConfigsNew()} return desired configs grouped by
+   * {@code (serviceId, configType)}. However, many methods still expect the configs grouped by {@code configType}
+   * only. This adapter method serves compatibility with old style methods. However, these methods don't
+   * work correctly in a multi-service environment.
+   * @param desirecConfigs
+   * @return
+   */
+  private static Map<String, DesiredConfig> groupByConfigTypeOnly(Map<Pair<Long, String>, DesiredConfig> desirecConfigs) {
+    return desirecConfigs.entrySet().stream()
+      .map( entry -> new AbstractMap.SimpleEntry<>(entry.getKey().getRight(), entry.getValue()) )
+      .collect(toMap(
+        Entry::getKey,
+        Entry::getValue,
+        (value1, value2) -> {
+          LOG.error("Conflicting desired configs for type {} serviceId's: [{}, {}]",
+            value1.getConfigType(), value1.getServiceId(), value2.getServiceId());
+          return value1;
+        }
+      ));
+  }
+
+  @Override
+  public Map<Pair<Long, String>, DesiredConfig> getDesiredConfigsNew() {
+    return getDesiredConfigsNew(true);
+  }
+
+  @Override
+  public Map<Pair<Long, String>, DesiredConfig> getDesiredConfigsNew(boolean cachedConfigEntities) {
+    Map<Pair<Long, String>, Set<DesiredConfig>> activeConfigsByType = getDesiredConfigs(false, cachedConfigEntities);
     return Maps.transformEntries(
       activeConfigsByType,
-      new Maps.EntryTransformer<String, Set<DesiredConfig>, DesiredConfig>() {
-        @Override
-        public DesiredConfig transformEntry(@Nullable String key, @Nullable Set<DesiredConfig> value) {
-          return value.iterator().next();
-        }
-      });
+      (key, value) -> value.iterator().next());
   }
 
   /**
@@ -2027,11 +2044,11 @@ public class ClusterImpl implements Cluster {
    * @param cachedConfigEntities retrieves cluster config entities from the cache if true, otherwise from the DB directly.
    * @return a map of type-to-configuration information.
    */
-  private Map<String, Set<DesiredConfig>> getDesiredConfigs(boolean allVersions, boolean cachedConfigEntities) {
+  private Map<Pair<Long, String>, Set<DesiredConfig>> getDesiredConfigs(boolean allVersions, boolean cachedConfigEntities) {
     clusterGlobalLock.readLock().lock();
     try {
-      Map<String, Set<DesiredConfig>> map = new HashMap<>();
-      Collection<String> types = new HashSet<>();
+      Map<Pair<Long, String>, Set<DesiredConfig>> desiredConfigs = new HashMap<>();
+      Set<Pair<Long, String>> serviceIdsAndTypes = new HashSet<>();
       Collection<ClusterConfigEntity> entities;
       if (cachedConfigEntities) {
         entities = getClusterEntity().getClusterConfigEntities();
@@ -2041,65 +2058,61 @@ public class ClusterImpl implements Cluster {
       for (ClusterConfigEntity configEntity : entities) {
         if (allVersions || configEntity.isSelected()) {
           DesiredConfig desiredConfig = new DesiredConfig();
-          desiredConfig.setServiceId(null);
+          desiredConfig.setServiceId(configEntity.getServiceId());
           desiredConfig.setServiceGroupId(null);
           desiredConfig.setTag(configEntity.getTag());
+          desiredConfig.setConfigType(configEntity.getType());
 
-          if (!allConfigs.containsKey(configEntity.getType())) {
-            LOG.error("An inconsistency exists for configuration {}", configEntity.getType());
+
+          ConcurrentMap<String, ConcurrentMap<String, Config>> configs = (configEntity.getServiceId() == null)
+            ? allConfigs : serviceConfigs.getOrDefault(configEntity.getServiceId(), emptyConcurrentMap());
+
+          if (!configs.containsKey(configEntity.getType())) {
+            LOG.error("An inconsistency exists for configuration type:{}, serviceId: {}",
+              configEntity.getType(), configEntity.getServiceId());
             continue;
           }
 
-          Map<String, Config> configMap = allConfigs.get(configEntity.getType());
+          Map<String, Config> configMap = configs.get(configEntity.getType());
           if (!configMap.containsKey(configEntity.getTag())) {
-            LOG.error("An inconsistency exists for the configuration {} with tag {}",
-              configEntity.getType(), configEntity.getTag());
-
+            LOG.error("An inconsistency exists for the configuration [type: {}, serviceId: {}] with tag {}",
+              configEntity.getType(), configEntity.getServiceId(), configEntity.getTag());
             continue;
           }
 
           Config config = configMap.get(configEntity.getTag());
           desiredConfig.setVersion(config.getVersion());
 
-          Set<DesiredConfig> configs = map.get(configEntity.getType());
-          if (configs == null) {
-            configs = new HashSet<>();
-          }
-
-          configs.add(desiredConfig);
-
-          map.put(configEntity.getType(), configs);
-          types.add(configEntity.getType());
+          desiredConfigs
+            .computeIfAbsent(configEntity.getServiceIdAndType(), __ -> new HashSet<>())
+            .add(desiredConfig);
+          serviceIdsAndTypes.add(configEntity.getServiceIdAndType());
         }
       }
 
       // TODO AMBARI-10679, need efficient caching from hostId to hostName...
       Map<Long, String> hostIdToName = new HashMap<>();
 
-      if (!map.isEmpty()) {
-        Map<String, List<HostConfigMapping>> hostMappingsByType =
-          hostConfigMappingDAO.findSelectedHostsByTypes(clusterId, types);
+      if (!desiredConfigs.isEmpty()) {
+        Map<Pair<Long, String>, List<HostConfigMapping>> hostMappingsByServiceIdAndType =
+          hostConfigMappingDAO.findSelectedHostsByServiceIdAndType(clusterId, serviceIdsAndTypes);
 
-        for (Entry<String, Set<DesiredConfig>> entry : map.entrySet()) {
+        for (Entry<Pair<Long, String>, Set<DesiredConfig>> entry : desiredConfigs.entrySet()) {
           List<DesiredConfig.HostOverride> hostOverrides = new ArrayList<>();
-          for (HostConfigMapping mappingEntity : hostMappingsByType.get(entry.getKey())) {
+          for (HostConfigMapping mappingEntity : hostMappingsByServiceIdAndType.get(entry.getKey())) {
 
-            if (!hostIdToName.containsKey(mappingEntity.getHostId())) {
-              HostEntity hostEntity = hostDAO.findById(mappingEntity.getHostId());
-              hostIdToName.put(mappingEntity.getHostId(), hostEntity.getHostName());
-            }
+            String hostName = hostIdToName.computeIfAbsent(
+              mappingEntity.getHostId(),
+              hostId -> hostDAO.findById(hostId).getHostName());
 
-            hostOverrides.add(new DesiredConfig.HostOverride(
-              hostIdToName.get(mappingEntity.getHostId()), mappingEntity.getVersion()));
+            hostOverrides.add(new DesiredConfig.HostOverride(hostName, mappingEntity.getVersion()));
           }
 
-          for (DesiredConfig c : entry.getValue()) {
-            c.setHostOverrides(hostOverrides);
-          }
+          entry.getValue().forEach(dc -> dc.setHostOverrides(hostOverrides));
         }
       }
 
-      return map;
+      return desiredConfigs;
     } finally {
       clusterGlobalLock.readLock().unlock();
     }
@@ -2112,6 +2125,7 @@ public class ClusterImpl implements Cluster {
 
     // Create next service config version
     ServiceConfigEntity serviceConfigEntity = new ServiceConfigEntity();
+    serviceConfigEntity.setServiceId(serviceId);
 
     clusterGlobalLock.writeLock().lock();
     try {
@@ -2509,29 +2523,16 @@ public class ClusterImpl implements Cluster {
 
   //TODO this needs to be reworked to support multiple instance of same service
   @Transactional
-  ServiceConfigVersionResponse applyConfigs(Set<Config> configs, String user, String serviceConfigVersionNote) throws AmbariException {
+  ServiceConfigVersionResponse applyConfigs(Optional<Long> serviceId, Set<Config> configs, String user, String serviceConfigVersionNote) throws AmbariException {
     List<ClusterConfigEntity> appliedConfigs = new ArrayList<>();
-    Long serviceName = getServiceForConfigTypes( configs.stream().map(Config::getType).collect(toList()));
-    Long resultingServiceId = null;
-    for (Config config : configs) {
-      for (Long serviceId : serviceConfigTypes.keySet()) {
-        if (serviceConfigTypes.get(serviceId).contains(config.getType())) {
-          if (resultingServiceId == null) {
-            resultingServiceId = serviceId;
-            break;
-          } else if (!resultingServiceId.equals(serviceId)) {
-            String error = String.format("Updating configs for multiple services by a " +
-                            "single API request isn't supported. Conflicting services %s and %s for %s",
-                    getService(serviceId).getName(), getService(resultingServiceId).getName(), config.getType());
-            IllegalArgumentException exception = new IllegalArgumentException(error);
-            LOG.error(error + ", config version not created for {}", getService(resultingServiceId).getName());
-            throw exception;
-          } else {
-            break;
-          }
-        }
+    configs.forEach( config -> {
+      checkServiceId("applyConfigs", serviceId, config.getType());
+      if (serviceId.isPresent()) {
+        Preconditions.checkArgument(serviceConfigTypes.get(serviceId.get()).contains(config.getType()),
+          "Illegal config type [%s] for service [%s]", config.getType(), serviceId.get());
       }
-    }
+    });
+
     // update the selected flag for every config type
     ClusterEntity clusterEntity = getClusterEntity();
     Collection<ClusterConfigEntity> clusterConfigs = clusterEntity.getClusterConfigEntities();
@@ -2552,7 +2553,7 @@ public class ClusterImpl implements Cluster {
 
     clusterEntity = clusterDAO.merge(clusterEntity);
 
-    if (resultingServiceId == null) {
+    if (!serviceId.isPresent()) {
       ArrayList<String> configTypes = new ArrayList<>();
       for (Config config : configs) {
         configTypes.add(config.getType());
@@ -2562,7 +2563,7 @@ public class ClusterImpl implements Cluster {
       LOG.error("No service found for config types '{}', service config version not created", configTypes);
       return null;
     } else {
-      return createServiceConfigVersion(resultingServiceId, user, serviceConfigVersionNote);
+      return createServiceConfigVersion(serviceId.get(), user, serviceConfigVersionNote);
     }
 
   }
@@ -2587,6 +2588,7 @@ public class ClusterImpl implements Cluster {
 
   @Override
   public Config getDesiredConfigByType(Optional<Long> serviceId, String configType) {
+    checkServiceId("getDesiredConfigByType", serviceId, configType);
     ClusterConfigEntity config = clusterDAO.findEnabledConfigByType(getClusterId(), configType);
     if (null == config) {
       return null;
@@ -2861,7 +2863,7 @@ public class ClusterImpl implements Cluster {
     List<HostComponentDesiredStateEntity> hostComponentDesiredStateEntities =
         hostIds.isEmpty() ? Collections.EMPTY_LIST : hostComponentDesiredStateDAO.findByHostsAndCluster(hostIds, clusterId);
     Map<Long, Map<Long, HostComponentDesiredStateEntity>> mappedHostIds = hostComponentDesiredStateEntities.stream().collect(
-        Collectors.groupingBy(HostComponentDesiredStateEntity::getHostId,
+        groupingBy(HostComponentDesiredStateEntity::getHostId,
             Collectors.toMap(HostComponentDesiredStateEntity::getId, Function.identity())
         )
     );

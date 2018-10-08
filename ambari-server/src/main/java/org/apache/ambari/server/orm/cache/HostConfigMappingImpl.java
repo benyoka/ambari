@@ -19,6 +19,8 @@
 package org.apache.ambari.server.orm.cache;
 
 
+import org.apache.commons.lang3.tuple.Pair;
+
 public class HostConfigMappingImpl implements HostConfigMapping {
   
   private Long clusterId;
@@ -150,6 +152,11 @@ public class HostConfigMappingImpl implements HostConfigMapping {
     if (selected == null)
       throw new RuntimeException("Selected couldn't be null");
     this.selected = selected;
+  }
+
+  @Override
+  public Pair<Long, String> getServiceIdAndType() {
+    return Pair.of(serviceId, type);
   }
 
   @Override

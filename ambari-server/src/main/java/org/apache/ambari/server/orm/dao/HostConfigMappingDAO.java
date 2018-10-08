@@ -17,6 +17,8 @@
  */
 package org.apache.ambari.server.orm.dao;
 
+import static java.util.stream.Collectors.groupingBy;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -37,6 +39,7 @@ import org.apache.ambari.server.orm.entities.HostConfigMappingEntity;
 import org.apache.ambari.server.orm.entities.HostEntity;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.Predicate;
+import org.apache.commons.lang3.tuple.Pair;
 
 import com.google.inject.Inject;
 import com.google.inject.Provider;
@@ -243,15 +246,13 @@ public class HostConfigMappingDAO {
 
   @RequiresSession
   public Map<String, List<HostConfigMapping>> findSelectedHostsByTypes(final long clusterId,
-                                                                             Collection<String> types) {
+                                                                             Set<String> types) {
     populateCache();
     
     Map<String, List<HostConfigMapping>> mappingsByType = new HashMap<>();
     
     for (String type : types) {
-      if (!mappingsByType.containsKey(type)) {
-        mappingsByType.put(type, new ArrayList<>());
-      }
+      mappingsByType.put(type, new ArrayList<>());
     }
 
     if (!types.isEmpty()) {
@@ -273,6 +274,25 @@ public class HostConfigMappingDAO {
 
     return mappingsByType;
   }
+
+  /**
+   * @param clusterId the cluster id
+   * @param typesAndServiceIds (config_type, serviceId) pairs to search for
+   * @return Lists of HostConfigMapping grouped by (config_type, serviceId) matching the search criteria specified by
+   * the input arguments
+   */
+  @RequiresSession
+  public Map<Pair<Long, String>, List<HostConfigMapping>> findSelectedHostsByServiceIdAndType(final long clusterId,
+                                                                                              Set<Pair<Long, String>> typesAndServiceIds) {
+    populateCache();
+
+    return hostConfigMappingByHost.values().stream()
+      .flatMap(hcMappings -> hcMappings.stream() )
+      .filter( hcm ->
+        hcm.getClusterId().longValue() == clusterId && typesAndServiceIds.contains(hcm.getServiceIdAndType()))
+      .collect(groupingBy(HostConfigMapping::getServiceIdAndType));
+  }
+
 
   @RequiresSession
   public List<HostConfigMappingEntity> findAll() {

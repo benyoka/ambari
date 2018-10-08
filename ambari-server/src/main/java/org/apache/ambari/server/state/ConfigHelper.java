@@ -17,6 +17,9 @@
  */
 package org.apache.ambari.server.state;
 
+import static java.util.stream.Collectors.toMap;
+
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -60,6 +63,7 @@ import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.math.NumberUtils;
 import org.apache.commons.lang3.StringEscapeUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -933,11 +937,10 @@ public class ConfigHelper {
     Set<String> stackConfigTypes = ambariMetaInfo.getStack(stackId.getStackName(),
             stackId.getStackVersion()).getConfigTypeAttributes().keySet();
     Map<String, Config> actualConfigs = new HashMap<>();
-    Map<String, DesiredConfig> desiredConfigs = cluster.getDesiredConfigs();
+    Map<Pair<Long, String>, DesiredConfig> desiredConfigs = cluster.getDesiredConfigsNew();
 
-    for (Map.Entry<String, DesiredConfig> desiredConfigEntry : desiredConfigs.entrySet()) {
-      String configType = desiredConfigEntry.getKey();
-      DesiredConfig desiredConfig = desiredConfigEntry.getValue();
+    for (DesiredConfig desiredConfig: desiredConfigs.values()) {
+      String configType = desiredConfig.getConfigType();
       actualConfigs.put(configType, cluster.getConfig(desiredConfig.getServiceIdOption(), configType, desiredConfig.getTag()));
     }
 
@@ -1464,7 +1467,7 @@ public class ConfigHelper {
     // - desired type DOES exist in actual
     // --- desired tags DO match actual tags: not_stale
     // --- desired tags DO NOT match actual tags
-    // ---- merge values, determine changed keys, check stack: stale
+    // ---- merge values, determine  changed keys, check stack: stale
 
     Iterator<Entry<String, Map<String, String>>> it = desired.entrySet().iterator();
     List<String> changedProperties = new LinkedList<>();
@@ -1489,7 +1492,7 @@ public class ConfigHelper {
         } else {
           staleEntry = (serviceInfo.hasConfigDependency(type) || componentInfo.hasConfigType(type));
           if (staleEntry) {
-            Collection<String> changedKeys = findChangedKeys(cluster, type, tags.values(), actualTags.values());
+            Collection<String> changedKeys = findChangedKeys(cluster, sch.getServiceId(), type, tags.values(), actualTags.values());
             changedProperties.addAll(changedKeys);
           }
         }
@@ -1515,6 +1518,14 @@ public class ConfigHelper {
     }
 
     return stale;
+  }
+
+  public static Map<String, DesiredConfig> filterByServiceId(Map<Pair<Long, String>, DesiredConfig> desiredConfigs,
+                                                             Optional<Long> serviceId) {
+    return desiredConfigs.entrySet().stream()
+      .filter( entry -> Objects.equal(entry.getKey().getLeft(), serviceId.orElse(null)) )
+      .map( entry -> new AbstractMap.SimpleEntry<>(entry.getKey().getRight(), entry.getValue()) )
+      .collect( toMap(Entry::getKey, Entry::getValue) );
   }
 
   /**
@@ -1782,10 +1793,10 @@ public class ConfigHelper {
       String tag = currentConfig.getValue();
       Collection<String> changedKeys = Collections.emptySet();
       if (previousConfigs.containsKey(type)) {
-        changedKeys = findChangedKeys(cluster, type, Collections.singletonList(tag),
+        changedKeys = findChangedKeys(cluster, serviceId, type, Collections.singletonList(tag),
             Collections.singletonList(previousConfigs.get(type)));
       } else {
-        Config config = cluster.getConfig(type, tag);
+        Config config = cluster.getConfig(Optional.of(serviceId), type, tag);
         if (config != null) {
           changedKeys = config.getProperties().keySet();
         }
@@ -1809,7 +1820,7 @@ public class ConfigHelper {
     Map<String, HostConfig> actual = sch.getActualConfigs();
     if (STALE_CONFIGS_CACHE_ENABLED) {
       Map<String, Map<String, String>> desired = getEffectiveDesiredTags(cluster, sch.getHostName(),
-              cluster.getDesiredConfigs());
+        cluster.getDesiredConfigs());
       int staleHash = Objects.hashCode(actual.hashCode(),
               desired.hashCode(),
               sch.getHostName(),
@@ -1888,21 +1899,21 @@ public class ConfigHelper {
   /**
    * @return the keys that have changed values
    */
-  private Collection<String> findChangedKeys(Cluster cluster, String type,
+  private Collection<String> findChangedKeys(Cluster cluster, Long serviceId, String type,
                                              Collection<String> desiredTags, Collection<String> actualTags) {
 
     Map<String, String> desiredValues = new HashMap<>();
     Map<String, String> actualValues = new HashMap<>();
 
     for (String tag : desiredTags) {
-      Config config = cluster.getConfig(type, tag);
+      Config config = cluster.getConfig(Optional.of(serviceId), type, tag);
       if (null != config) {
         desiredValues.putAll(config.getProperties());
       }
     }
 
     for (String tag : actualTags) {
-      Config config = cluster.getConfig(type, tag);
+      Config config = cluster.getConfig(Optional.of(serviceId), type, tag);
       if (null != config) {
         actualValues.putAll(config.getProperties());
       }
@@ -2065,7 +2076,7 @@ public class ConfigHelper {
       if (LOG.isInfoEnabled()) {
         LOG.info("For configs update on host {} will be used cluster entity {}", hostId, cl.getClusterEntity().toString());
       }
-      Map<String, DesiredConfig> clusterDesiredConfigs = cl.getDesiredConfigs(false);
+      Map<String, DesiredConfig> clusterDesiredConfigs = cl.getDesiredConfigs(false); // TODO: must rewrite for multi-service
       LOG.info("For configs update on host {} will be used following cluster desired configs {}", hostId,
           clusterDesiredConfigs.toString());
 

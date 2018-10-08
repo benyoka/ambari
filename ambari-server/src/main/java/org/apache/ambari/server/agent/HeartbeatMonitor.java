@@ -179,7 +179,8 @@ public class HeartbeatMonitor implements Runnable {
     List<StatusCommand> cmds = new ArrayList<>();
 
     for (Cluster cl : clusters.getClustersForHost(hostname)) {
-      Map<String, DesiredConfig> desiredConfigs = cl.getDesiredConfigs();
+      Map<String, DesiredConfig> // TODO: must rewrite for multi-service
+        desiredConfigs = cl.getDesiredConfigs();
       for (ServiceComponentHost sch : cl.getServiceComponentHosts(hostname)) {
         switch (sch.getState()) {
           case INIT:

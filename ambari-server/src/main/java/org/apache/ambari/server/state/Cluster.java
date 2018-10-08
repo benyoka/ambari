@@ -43,6 +43,7 @@ import org.apache.ambari.server.orm.entities.UpgradeEntity;
 import org.apache.ambari.server.security.authorization.AuthorizationException;
 import org.apache.ambari.server.state.configgroup.ConfigGroup;
 import org.apache.ambari.server.state.scheduler.RequestExecution;
+import org.apache.commons.lang3.tuple.Pair;
 
 import com.google.common.collect.ListMultimap;
 
@@ -485,7 +486,7 @@ public interface Cluster {
   void addConfig(Config config, Optional<Long> serviceId);
 
   /**
-   * Gets all configurations defined for a cluster.
+   * Geats all configurations defined for a cluster.
    *
    * @return the collection of all configs that have been defined.
    */
@@ -499,6 +500,8 @@ public interface Cluster {
   List<Config> getConfigsByServiceId(Long serviceId);
 
   /**
+   * @deprecated Use {@link #addDesiredConfig(String, Optional, Set)} instead
+   *
    * Adds and sets a DESIRED configuration to be applied to a cluster.  There
    * can be only one selected config per type.
    *
@@ -507,19 +510,34 @@ public interface Cluster {
    * @return <code>true</code> if the config was added, or <code>false</code>
    * if the config is already set as the current
    */
+  @Deprecated
   ServiceConfigVersionResponse addDesiredConfig(String user, Set<Config> configs) throws AmbariException;
 
   /**
+   * @deprecated Use {@link #addDesiredConfig(String, Optional, Set, String)} instead
+   *
    * Adds and sets a DESIRED configuration to be applied to a cluster.  There
    * can be only one selected config per type.
    *
-   * @param user                     the user making the change for audit purposes
+   * @param user                     the user making the change for
    * @param configs                  the set of {@link org.apache.ambari.server.state.Config} objects to set as desired
    * @param serviceConfigVersionNote note to attach to service config version if created
    * @return <code>true</code> if the config was added, or <code>false</code>
    * if the config is already set as the current
    */
+  @Deprecated
   ServiceConfigVersionResponse addDesiredConfig(String user, Set<Config> configs, String serviceConfigVersionNote) throws AmbariException;
+
+  /**
+   * TODO: doc
+   */
+  ServiceConfigVersionResponse addDesiredConfig(String user, Optional<Long> serviceId, Set<Config> configs) throws AmbariException;
+
+  /**
+   * TODO: doc
+   */
+  ServiceConfigVersionResponse addDesiredConfig(String user, Optional<Long> serviceId, Set<Config> configs, String serviceConfigVersionNote) throws AmbariException;
+
 
   ServiceConfigVersionResponse createServiceConfigVersion(Long serviceId, String user, String note,
                                                           ConfigGroup configGroup) throws AmbariException;
@@ -589,18 +607,37 @@ public interface Cluster {
   boolean isConfigTypeExists(String configType);
 
   /**
+   * @deprecated use {@link #getDesiredConfigsNew()} instead.
    * Gets the active desired configurations for the cluster.
    *
    * @return a map of type-to-configuration information.
    */
+  @Deprecated
   Map<String, DesiredConfig> getDesiredConfigs();
 
   /**
+   * @deprecated use {@link #getDesiredConfigsNew(boolean)} instead.
    * Gets the active desired configurations for the cluster.
    * @param cachedConfigEntities retrieves cluster config entities from the cache if true, otherwise from the DB directly.
    * @return a map of type-to-configuration information.
    */
+  @Deprecated
   Map<String, DesiredConfig> getDesiredConfigs(boolean cachedConfigEntities);
+
+  /**
+   * Gets the active desired configurations for the cluster.
+   *
+   * @return a map of (serviceId, config_type) -> configuration information.
+   */
+  Map<Pair<Long, String>, DesiredConfig> getDesiredConfigsNew();
+
+  /**
+   * Gets the active desired configurations for the cluster.
+   * @param cachedConfigEntities retrieves cluster config entities from the cache if true, otherwise from the DB directly.
+   * @return a map of (serviceId, config_type) -> configuration information.
+   */
+  Map<Pair<Long, String>, DesiredConfig> getDesiredConfigsNew(boolean cachedConfigEntities);
+
 
   ClusterEntity getClusterEntity();
 
@@ -609,7 +646,7 @@ public interface Cluster {
    *
    * @return a map of type-to-configuration information.
    */
-  Map<String, Set<DesiredConfig>> getAllDesiredConfigVersions();
+  Map<Pair<Long, String>, Set<DesiredConfig>> getAllDesiredConfigVersions();
 
 
   /**

@@ -17,6 +17,8 @@
  */
 package org.apache.ambari.server.orm.cache;
 
+import org.apache.commons.lang3.tuple.Pair;
+
 public interface HostConfigMapping {
   
   Long getClusterId();
@@ -45,4 +47,6 @@ public interface HostConfigMapping {
   
   Integer getSelected();
   void setSelected(Integer selected);
+
+  Pair<Long, String> getServiceIdAndType();
 }

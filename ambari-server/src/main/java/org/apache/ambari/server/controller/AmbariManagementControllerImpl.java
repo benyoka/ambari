@@ -18,6 +18,7 @@
 
 package org.apache.ambari.server.controller;
 
+import static java.util.stream.Collectors.toSet;
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.AGENT_STACK_RETRY_COUNT;
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.AGENT_STACK_RETRY_ON_UNAVAILABILITY;
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.CLIENTS_TO_UPDATE_CONFIGS;
@@ -75,7 +76,6 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 import javax.persistence.RollbackException;
 
@@ -249,6 +249,7 @@ import org.apache.commons.lang.math.NumberUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -865,10 +866,10 @@ public class AmbariManagementControllerImpl implements AmbariManagementControlle
       hostsToUpdate.add(hostName);
       Set<Long> hostIds = clusterHosts.stream()
           .filter(h -> hostName.equals(h.getHostName()))
-          .map(h -> h.getHostId()).collect(Collectors.toSet());
+          .map(h -> h.getHostId()).collect(toSet());
       Set<String> publicHostNames = clusterHosts.stream()
           .filter(h -> hostName.equals(h.getHostName()))
-          .map(h -> h.getPublicHostName()).collect(Collectors.toSet());
+          .map(h -> h.getPublicHostName()).collect(toSet());
       Set<String> hostNames = new HashSet<>();
       hostNames.add(hostName);
       ServiceComponentHost sch = sc.getServiceComponentHost(request.getHostname());
@@ -1412,7 +1413,7 @@ public class AmbariManagementControllerImpl implements AmbariManagementControlle
       checkState = true;
     }
 
-    Map<String, DesiredConfig> desiredConfigs = cluster.getDesiredConfigs();
+    Map<String, DesiredConfig> desiredConfigs = cluster.getDesiredConfigs(); // TODO: must rewrite for multi-service
     Map<String, Host> hosts = clusters.getHostsForCluster(cluster.getClusterName());
 
     /*
@@ -1865,6 +1866,11 @@ public class AmbariManagementControllerImpl implements AmbariManagementControlle
       LOG.error(msg);
       throw new IllegalArgumentException(msg);
     }
+    else if (desiredConfigs != null && !desiredConfigs.isEmpty()) {
+      Set<Optional<Long>> desiredConfigServiceIds = desiredConfigs.stream().map(dc -> dc.getServiceIdOption()).collect(toSet());
+      String msg = "Desired configs must belong to the same service instance. Service ids: " + desiredConfigServiceIds;
+      Preconditions.checkArgument(desiredConfigServiceIds.size() == 1, msg);
+    }
 
     // set the new name of the cluster if change is requested
     if (!cluster.getClusterName().equals(request.getClusterName())) {
@@ -1886,6 +1892,8 @@ public class AmbariManagementControllerImpl implements AmbariManagementControlle
     if (isConfigurationCreationNeeded) {
 
       if (!desiredConfigs.isEmpty()) {
+        Optional<Long> serviceId = desiredConfigs.iterator().next().getServiceIdOption();
+
         Set<Config> configs = new HashSet<>();
         String note = null;
 
@@ -1918,12 +1926,12 @@ public class AmbariManagementControllerImpl implements AmbariManagementControlle
         if (!configs.isEmpty()) {
           Map<String, Config> existingConfigTypeToConfig = new HashMap<>();
           for (Config config : configs) {
-            Config existingConfig = cluster.getDesiredConfigByType(config.getType());
+            Config existingConfig = cluster.getDesiredConfigByType(serviceId, config.getType());
             existingConfigTypeToConfig.put(config.getType(), existingConfig);
           }
 
           String authName = getAuthName();
-          serviceConfigVersionResponse = cluster.addDesiredConfig(authName, configs, note);
+          serviceConfigVersionResponse = cluster.addDesiredConfig(authName, serviceId, configs, note);
           if (serviceConfigVersionResponse != null) {
             List<String> hosts = serviceConfigVersionResponse.getHosts();
             int numAffectedHosts = null != hosts ? hosts.size() : 0;
